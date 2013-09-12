@@ -14,11 +14,6 @@ module VagrantVminfo
     Vagrant::Util::TemplateRenderer.render(expand_script_path(script_file_name), options)
   end
 
-  # TODO: unnecessary?
-  #def self.expand_script_path(script_file_name)
-  #  File.expand_path("lib/vagrant-plugin-dummy/scripts/#{script_file_name}", VagrantPluginDummy.vagrant_plugin_dummy_root)
-  #end
-
 end
 
 require "vagrant-vminfo/plugin"
