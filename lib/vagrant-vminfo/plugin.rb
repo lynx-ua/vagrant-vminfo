@@ -6,6 +6,7 @@ rescue LoadError
 end
 
 require "yaml"
+require "time"
 
 # This is a sanity check to make sure no one is attempting to install
 # this into an early Vagrant version.
@@ -33,8 +34,8 @@ module VagrantVminfo
         provider = vm.provider_name.id2name
         if provider == 'virtualbox'
             return get_vm_info_virtualbox(vm)
-        elsif provider == 'vmware_workstation'
-            return get_vm_info_vmware_workstation(vm)
+        elsif provider == 'vmware_workstation' or provider == 'vmware_fusion'
+            return get_vm_info_vmware(vm)
         end
     end
 
@@ -52,6 +53,7 @@ module VagrantVminfo
             nic_count = Integer(nic_count)
         end
         # Check nic_count is not defined in case of VBox Guest Additions not install, or some other issue
+        vminfo = vm.provider.driver.execute("showvminfo", vm.id, "--machinereadable")
         if nic_count > 0
             (0..(nic_count-1)).each do |i|
                 nic_ip = vm.provider.driver.execute("guestproperty", "get", vm.id, "/VirtualBox/GuestInfo/Net/#{i}/V4/IP")[/Value: (.*)/, 1]
@@ -60,8 +62,8 @@ module VagrantVminfo
                 nic_netmask = vm.provider.driver.execute("guestproperty", "get", vm.id, "/VirtualBox/GuestInfo/Net/#{i}/V4/Netmask")[/Value: (.*)/, 1]
                 # Get the number of this network device based on the mac address
                 # TODO: probably just should just get a hash of all of this info somehow, my ruby foo is weak
-                nic_number = vm.provider.driver.execute("showvminfo", vm.id, "--machinereadable")[/\w*(\d)=\"#{nic_mac}\"/, 1]
-                nic_type = vm.provider.driver.execute("showvminfo", vm.id, "--machinereadable")[/nic#{nic_number}=\"(.*)\"/, 1]
+                nic_number = vminfo[/\w*(\d)=\"#{nic_mac}\"/, 1]
+                nic_type = vminfo[/nic#{nic_number}=\"(.*)\"/, 1]
                 networks << {'ip' => nic_ip,
                              'mac' => nic_mac,
                              'netmask' => nic_netmask,
@@ -69,10 +71,14 @@ module VagrantVminfo
                              'type' => nic_type}
             end
         end
-        return {"networks" => networks}
+        # If VM is running - VMStateChangeTime is actually it's launch time 
+        state_change_time = vminfo[/VMStateChangeTime=\"(.*)\"/, 1]
+        return {"launch_time" => Time.parse(state_change_time).strftime("%Y-%m-%d %H:%M:%S"),
+                "networks" => networks}
+
     end
 
-    def get_vm_info_vmware_workstation(vm)
+    def get_vm_info_vmware(vm)
         # Get VM info by virtualbox provider
         # We can get some network interfaces details and current IP address
 
@@ -131,6 +137,7 @@ module VagrantVminfo
         with_target_vms(argv) do |vm|
             info["name"] = vm.name.id2name
             info["status"] = vm.state.id.id2name
+
             # Check if vm is running - try to get some provider specific details
             if vm.state.id == :running
                 info["id"] = vm.id
